@@ -489,8 +489,9 @@
         <span id="result-emoji" class="result-emoji" aria-hidden="true">🚀</span>
         <p class="eyebrow">미션 완료</p>
         <h2 id="result-title">우주 여행을 완주했어요!</h2>
-        <div class="final-score"><span id="final-score">0</span><small>/ 10 정답</small></div>
+        <div class="final-score" aria-hidden="true"><span id="final-score">0</span><small>/ 10 정답</small></div>
         <p id="result-message" class="result-message"></p>
+        <p id="result-announcement" class="sr-only" role="status" aria-live="polite"></p>
         <button id="restart-button" class="restart-button" type="button">다시 도전하기 <span aria-hidden="true">↻</span></button>
       </div>
     </section>
@@ -527,6 +528,7 @@
       const progressBar = document.querySelector(".progress-track");
       const resultEmoji = document.querySelector("#result-emoji");
       const resultMessage = document.querySelector("#result-message");
+      const resultAnnouncement = document.querySelector("#result-announcement");
 
       let currentQuestion = 0;
       let points = 0;
@@ -587,7 +589,6 @@
       function showResults() {
         quizScreen.classList.remove("active");
         resultScreen.classList.add("active");
-        animateFinalScore(points);
         const ratio = points / questions.length;
         if (ratio === 1) {
           resultEmoji.textContent = "🌟";
@@ -602,6 +603,8 @@
           resultEmoji.textContent = "🌙";
           resultMessage.textContent = "모든 위대한 탐험가는 처음부터 시작해요. 한 번 더 도전해 볼까요?";
         }
+        resultAnnouncement.textContent = `최종 점수는 ${points}점, ${questions.length}개 중 ${points}개 정답입니다. ${resultMessage.textContent}`;
+        animateFinalScore(points);
         resultScreen.focus();
       }
 
