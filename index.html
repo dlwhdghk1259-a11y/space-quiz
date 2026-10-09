@@ -320,7 +320,8 @@
     .answer-note.bad { color: var(--wrong); }
 
     .next-button,
-    .restart-button {
+    .restart-button,
+    .copy-result-button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -338,7 +339,8 @@
     }
 
     .next-button:hover,
-    .restart-button:hover {
+    .restart-button:hover,
+    .copy-result-button:hover {
       transform: translateY(-2px);
       filter: brightness(1.08);
     }
@@ -389,6 +391,56 @@
       color: var(--muted);
       font-size: 1rem;
       letter-spacing: 0;
+    }
+
+    .mission-report {
+      max-width: 32rem;
+      margin: 0 auto 1rem;
+      padding: .9rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      text-align: left;
+      background: color-mix(in srgb, var(--surface) 86%, var(--accent-2) 14%);
+    }
+
+    .mission-report h3 {
+      margin: 0 0 .55rem;
+      font-size: .95rem;
+      letter-spacing: -.01em;
+    }
+
+    .mission-report-list {
+      margin: 0;
+      display: grid;
+      gap: .35rem;
+    }
+
+    .mission-report-list > div {
+      display: grid;
+      grid-template-columns: 5rem 1fr;
+      gap: .5rem;
+      font-size: .92rem;
+    }
+
+    .mission-report dt {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .mission-report dd {
+      margin: 0;
+      font-weight: 700;
+    }
+
+    .copy-result-button {
+      margin-top: .2rem;
+    }
+
+    .copy-feedback {
+      min-height: 1.2rem;
+      margin: .6rem 0 0;
+      color: var(--muted);
+      font-size: .9rem;
     }
 
     .sr-only {
@@ -491,6 +543,16 @@
         <h2 id="result-title">우주 여행을 완주했어요!</h2>
         <div class="final-score" aria-hidden="true"><span id="final-score">0</span><small>/ 10 정답</small></div>
         <p id="result-message" class="result-message"></p>
+        <section class="mission-report" aria-labelledby="mission-report-title">
+          <h3 id="mission-report-title">미션 리포트</h3>
+          <dl class="mission-report-list">
+            <div><dt>점수</dt><dd id="mission-score">0 / 10</dd></div>
+            <div><dt>랭크</dt><dd id="mission-rank">-</dd></div>
+            <div><dt>최장 문항</dt><dd id="mission-slowest">-</dd></div>
+          </dl>
+        </section>
+        <button id="copy-result-button" class="copy-result-button" type="button">결과 복사 <span aria-hidden="true">⧉</span></button>
+        <p id="copy-feedback" class="copy-feedback" role="status" aria-live="polite"></p>
         <p id="result-announcement" class="sr-only" role="status" aria-live="polite"></p>
         <button id="restart-button" class="restart-button" type="button">다시 도전하기 <span aria-hidden="true">↻</span></button>
       </div>
@@ -528,11 +590,19 @@
       const progressBar = document.querySelector(".progress-track");
       const resultEmoji = document.querySelector("#result-emoji");
       const resultMessage = document.querySelector("#result-message");
+      const missionScore = document.querySelector("#mission-score");
+      const missionRank = document.querySelector("#mission-rank");
+      const missionSlowest = document.querySelector("#mission-slowest");
+      const copyResultButton = document.querySelector("#copy-result-button");
+      const copyFeedback = document.querySelector("#copy-feedback");
       const resultAnnouncement = document.querySelector("#result-announcement");
 
       let currentQuestion = 0;
       let points = 0;
       let answered = false;
+      let questionStartedAt = performance.now();
+      let questionTimes = new Array(questions.length).fill(0);
+      let latestMissionReportText = "";
 
       function renderQuestion() {
         const question = questions[currentQuestion];
@@ -549,6 +619,7 @@
         nextButton.hidden = true;
         nextButton.textContent = currentQuestion === questions.length - 1 ? "결과 보기  →" : "다음 문제  →";
         answers.innerHTML = "";
+        questionStartedAt = performance.now();
 
         question.options.forEach((option, index) => {
           const button = document.createElement("button");
@@ -564,6 +635,7 @@
       function chooseAnswer(selected) {
         if (answered) return;
         answered = true;
+        questionTimes[currentQuestion] = Math.max(0, performance.now() - questionStartedAt);
         const question = questions[currentQuestion];
         const answerButtons = [...answers.querySelectorAll(".answer")];
         answerButtons.forEach((button) => {
@@ -586,10 +658,51 @@
         nextButton.focus();
       }
 
+      function getRankTitle(ratio) {
+        if (ratio === 1) return "은하 사령관";
+        if (ratio >= .7) return "궤도 항해사";
+        if (ratio >= .4) return "별빛 탐험가";
+        return "우주 훈련생";
+      }
+
+      function formatElapsed(ms) {
+        const seconds = Math.max(0.1, Math.round(ms / 100) / 10);
+        return `${String(seconds).replace(/\.0$/, "")}초`;
+      }
+
+      async function copyMissionReport() {
+        if (!latestMissionReportText) return;
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(latestMissionReportText);
+          } else {
+            const fallbackInput = document.createElement("textarea");
+            fallbackInput.value = latestMissionReportText;
+            fallbackInput.setAttribute("readonly", "");
+            fallbackInput.style.position = "fixed";
+            fallbackInput.style.left = "-9999px";
+            document.body.append(fallbackInput);
+            fallbackInput.select();
+            document.execCommand("copy");
+            fallbackInput.remove();
+          }
+          copyFeedback.textContent = "미션 리포트를 복사했어요.";
+        } catch {
+          copyFeedback.textContent = "복사에 실패했어요. 아래 리포트를 직접 복사해 주세요.";
+        }
+      }
+
       function showResults() {
         quizScreen.classList.remove("active");
         resultScreen.classList.add("active");
         const ratio = points / questions.length;
+        const percentage = Math.round(ratio * 100);
+        const rankTitle = getRankTitle(ratio);
+        const slowestTime = Math.max(...questionTimes);
+        const slowestIndex = questionTimes.indexOf(slowestTime);
+        const slowestQuestion = questions[slowestIndex] ?? questions[0];
+        const slowestSummary = `${slowestIndex + 1}번 (${formatElapsed(slowestTime)}) · ${slowestQuestion.text}`;
+
         if (ratio === 1) {
           resultEmoji.textContent = "🌟";
           resultMessage.textContent = "완벽한 궤도예요! 당신은 이제 공식 우주 천재입니다.";
@@ -603,7 +716,12 @@
           resultEmoji.textContent = "🌙";
           resultMessage.textContent = "모든 위대한 탐험가는 처음부터 시작해요. 한 번 더 도전해 볼까요?";
         }
-        resultAnnouncement.textContent = `최종 점수는 ${points}점, ${questions.length}개 중 ${points}개 정답입니다. ${resultMessage.textContent}`;
+        missionScore.textContent = `${points} / ${questions.length}`;
+        missionRank.textContent = `${rankTitle} (${percentage}%)`;
+        missionSlowest.textContent = slowestSummary;
+        latestMissionReportText = `우주 미션 리포트: ${points}/${questions.length} 정답(${percentage}%), 랭크 ${rankTitle}, 가장 오래 걸린 문제 ${slowestSummary}`;
+        copyFeedback.textContent = "";
+        resultAnnouncement.textContent = `최종 점수는 ${points}점, ${questions.length}개 중 ${points}개 정답입니다. 랭크는 ${rankTitle}이며, 가장 오래 걸린 문제는 ${slowestSummary}입니다. ${resultMessage.textContent}`;
         animateFinalScore(points);
         resultScreen.focus();
       }
@@ -642,11 +760,22 @@
       restartButton.addEventListener("click", () => {
         currentQuestion = 0;
         points = 0;
+        questionTimes = new Array(questions.length).fill(0);
+        latestMissionReportText = "";
         score.textContent = "0";
+        missionScore.textContent = `0 / ${questions.length}`;
+        missionRank.textContent = "-";
+        missionSlowest.textContent = "-";
+        copyFeedback.textContent = "";
+        resultAnnouncement.textContent = "";
         resultScreen.classList.remove("active");
         quizScreen.classList.add("active");
         renderQuestion();
         document.querySelector(".answer").focus();
+      });
+
+      copyResultButton.addEventListener("click", () => {
+        void copyMissionReport();
       });
 
       renderQuestion();
